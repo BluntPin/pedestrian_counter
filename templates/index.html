@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Мониторинг пешеходного перехода | МТУСИ</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 30px; background-color: #f4f7f6; color: #333; }
+        .container { max-width: 800px; margin: auto; background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h2 { color: #004085; text-align: center; }
+        .upload-section { margin: 20px 0; text-align: center; }
+        input[type="file"] { margin-bottom: 10px; }
+        button { background-color: #0056b3; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; }
+        button:hover { background-color: #003d80; }
+        .result-section { margin-top: 25px; text-align: center; display: none; }
+        img { max-width: 100%; height: auto; border-radius: 5px; border: 1px solid #ddd; margin-top: 15px; }
+        .stats { font-size: 18px; font-weight: bold; color: #28a745; margin: 15px 0; }
+        .report-btn { background-color: #28a745; text-decoration: none; display: inline-block; padding: 10px 15px; color: white; border-radius: 5px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Система анализа загруженности пешеходного перехода</h2>
+    <p style="text-align:center; color: #666;">Загрузите фотографию пешеходного перехода для автоматического подсчета пешеходов с помощью YOLOv8.</p>
+
+    <div class="upload-section">
+        <input type="file" id="imageInput" accept="image/*"><br>
+        <button onclick="processImage()">Запустить обработку</button>
+    </div>
+
+    <div class="result-section" id="resultSection">
+        <div class="stats" id="statsText"></div>
+        <img id="resultImage" src="" alt="Результат детекции">
+        <br><br>
+        <a id="downloadReportLink" class="report-btn" href="#" target="_blank">Скачать PDF-отчёт</a>
+    </div>
+</div>
+
+<script>
+async function processImage() {
+    const fileInput = document.getElementById('imageInput');
+    if (!fileInput.files[0]) {
+        alert('Пожалуйста, выберите файл изображения!');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('image', fileInput.files[0]);
+
+    document.getElementById('statsText').innerText = 'Идет обработка изображения...';
+    document.getElementById('resultSection').style.display = 'block';
+
+    try {
+        const response = await fetch('/process', { method: 'POST', body: formData });
+        const data = await response.json();
+
+        if (response.ok) {
+            document.getElementById('resultImage').src = data.result_url + '?' + new Date().getTime();
+            document.getElementById('statsText').innerText = `Обнаружено пешеходов на переходе: ${data.count}`;
+            document.getElementById('downloadReportLink').href = `/generate_report/${data.id}`;
+        } else {
+            alert('Ошибка: ' + data.error);
+        }
+    } catch (err) {
+        alert('Произошла ошибка при отправке запроса.');
+        console.error(err);
+    }
+}
+</script>
+
+</body>
+</html>
