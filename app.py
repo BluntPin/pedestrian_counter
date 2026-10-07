@@ -42,6 +42,29 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/history', methods=['GET'])
+def get_history():
+    conn = sqlite3.connect('history.db')
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            'SELECT id, timestamp, result_filename, pedestrian_count '
+            'FROM history ORDER BY id DESC'
+        ).fetchall()
+    finally:
+        conn.close()
+
+    return jsonify([
+        {
+            'id': row['id'],
+            'timestamp': row['timestamp'],
+            'count': row['pedestrian_count'],
+            'result_url': f"/static/uploads/{row['result_filename']}"
+        }
+        for row in rows
+    ])
+
+
 @app.route('/process', methods=['POST'])
 def process_image():
     if 'image' not in request.files:

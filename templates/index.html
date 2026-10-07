@@ -15,6 +15,15 @@
         img { max-width: 100%; height: auto; border-radius: 5px; border: 1px solid #ddd; margin-top: 15px; }
         .stats { font-size: 18px; font-weight: bold; color: #28a745; margin: 15px 0; }
         .report-btn { background-color: #28a745; text-decoration: none; display: inline-block; padding: 10px 15px; color: white; border-radius: 5px; margin-top: 10px; }
+        .tabs { display: flex; gap: 10px; border-bottom: 1px solid #ddd; margin: 20px 0; }
+        .tab-btn { background: transparent; color: #0056b3; border-radius: 5px 5px 0 0; }
+        .tab-btn.active { background: #0056b3; color: white; }
+        .history-list { display: grid; gap: 16px; }
+        .history-item { display: grid; grid-template-columns: minmax(150px, 240px) 1fr; gap: 18px; align-items: center; padding: 15px; border: 1px solid #ddd; border-radius: 8px; }
+        .history-item img { width: 100%; margin: 0; }
+        .history-item p { margin: 8px 0; }
+        .history-empty, .history-error { text-align: center; color: #666; }
+        @media (max-width: 560px) { .history-item { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
@@ -23,17 +32,28 @@
     <h2>Система анализа загруженности пешеходного перехода</h2>
     <p style="text-align:center; color: #666;">Загрузите фотографию пешеходного перехода для автоматического подсчета пешеходов с помощью YOLOv8.</p>
 
-    <div class="upload-section">
-        <input type="file" id="imageInput" accept="image/*"><br>
-        <button onclick="processImage()">Запустить обработку</button>
+    <div class="tabs" role="tablist" aria-label="Разделы">
+        <button class="tab-btn active" id="uploadTabButton" type="button" role="tab" aria-selected="true" aria-controls="uploadTab" onclick="showTab('upload')">Загрузка</button>
+        <button class="tab-btn" id="historyTabButton" type="button" role="tab" aria-selected="false" aria-controls="historyTab" onclick="showTab('history')">История</button>
     </div>
 
-    <div class="result-section" id="resultSection">
-        <div class="stats" id="statsText"></div>
-        <img id="resultImage" src="" alt="Результат детекции">
-        <br><br>
-        <a id="downloadReportLink" class="report-btn" href="#" target="_blank">Скачать PDF-отчёт</a>
-    </div>
+    <section id="uploadTab" role="tabpanel" aria-labelledby="uploadTabButton">
+        <div class="upload-section">
+            <input type="file" id="imageInput" accept="image/*"><br>
+            <button type="button" onclick="processImage()">Запустить обработку</button>
+        </div>
+
+        <div class="result-section" id="resultSection">
+            <div class="stats" id="statsText"></div>
+            <img id="resultImage" src="" alt="Результат детекции">
+            <br><br>
+            <a id="downloadReportLink" class="report-btn" href="#" target="_blank">Скачать PDF-отчёт</a>
+        </div>
+    </section>
+
+    <section id="historyTab" role="tabpanel" aria-labelledby="historyTabButton" hidden>
+        <div class="history-list" id="historyList"></div>
+    </section>
 </div>
 
 <script>
@@ -63,6 +83,73 @@ async function processImage() {
         }
     } catch (err) {
         alert('Произошла ошибка при отправке запроса.');
+        console.error(err);
+    }
+}
+
+function showTab(tabName) {
+    const isHistory = tabName === 'history';
+    document.getElementById('uploadTab').hidden = isHistory;
+    document.getElementById('historyTab').hidden = !isHistory;
+    document.getElementById('uploadTabButton').classList.toggle('active', !isHistory);
+    document.getElementById('historyTabButton').classList.toggle('active', isHistory);
+    document.getElementById('uploadTabButton').setAttribute('aria-selected', String(!isHistory));
+    document.getElementById('historyTabButton').setAttribute('aria-selected', String(isHistory));
+
+    if (isHistory) loadHistory();
+}
+
+async function loadHistory() {
+    const historyList = document.getElementById('historyList');
+    historyList.replaceChildren();
+    const loading = document.createElement('p');
+    loading.className = 'history-empty';
+    loading.textContent = 'Загружаем историю...';
+    historyList.append(loading);
+
+    try {
+        const response = await fetch('/history');
+        if (!response.ok) throw new Error('Не удалось загрузить историю');
+        const entries = await response.json();
+        historyList.replaceChildren();
+
+        if (entries.length === 0) {
+            const empty = document.createElement('p');
+            empty.className = 'history-empty';
+            empty.textContent = 'История обработок пока пуста.';
+            historyList.append(empty);
+            return;
+        }
+
+        for (const entry of entries) {
+            const card = document.createElement('article');
+            card.className = 'history-item';
+
+            const image = document.createElement('img');
+            image.src = entry.result_url;
+            image.alt = `Результат обработки №${entry.id}`;
+            image.loading = 'lazy';
+
+            const details = document.createElement('div');
+            const date = document.createElement('p');
+            date.textContent = `Дата и время: ${entry.timestamp}`;
+            const count = document.createElement('p');
+            count.textContent = `Обнаружено пешеходов: ${entry.count}`;
+            const report = document.createElement('a');
+            report.className = 'report-btn';
+            report.href = `/generate_report/${entry.id}`;
+            report.textContent = 'Скачать PDF-отчёт';
+
+            details.append(date, count, report);
+            card.append(image, details);
+            historyList.append(card);
+        }
+    } catch (err) {
+        historyList.replaceChildren();
+        const error = document.createElement('p');
+        error.className = 'history-error';
+        error.textContent = 'Не удалось загрузить историю. Попробуйте обновить вкладку.';
+        historyList.append(error);
         console.error(err);
     }
 }
