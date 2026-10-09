@@ -1,9 +1,11 @@
 import os
+import io
 import sqlite3
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
 import cv2
 import numpy as np
+import xlsxwriter
 from ultralytics import YOLO
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
@@ -13,7 +15,7 @@ UPLOAD_FOLDER = 'static/uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Инициализация модели YOLOv8 (nano — лёгкая и быстрая)
+# Инициализация модели
 model = YOLO('yolov8n.pt')
 
 
@@ -86,7 +88,7 @@ def process_image():
     img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     cv2.imwrite(orig_path, img)
 
-    # Детекция через YOLOv8 (фильтруем класс 0 - person)
+    # Детекция через YOLOv8
     results = model(img, classes=[0])
 
     # Визуализация рамок
@@ -146,6 +148,87 @@ def generate_report(req_id):
 
     c.save()
     return send_file(pdf_path, as_attachment=True, download_name=f"report_{req_id}.pdf")
+
+
+@app.route('/generate_excel_report/<int:req_id>', methods=['GET'])
+def generate_excel_report(req_id):
+    conn = sqlite3.connect('history.db')
+    try:
+        row = conn.execute(
+            'SELECT timestamp, result_filename, pedestrian_count FROM history WHERE id = ?',
+            (req_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not row:
+        return jsonify({'error': 'Запись не найдена'}), 404
+
+    timestamp, result_filename, pedestrian_count = row
+    result_path = (
+        os.path.join(app.config['UPLOAD_FOLDER'], result_filename)
+        if result_filename else None
+    )
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output, {'in_memory': True})
+    worksheet = workbook.add_worksheet('Отчёт')
+    worksheet.hide_gridlines(2)
+    worksheet.set_column('A:A', 30)
+    worksheet.set_column('B:B', 28)
+    worksheet.set_column('C:C', 3)
+    worksheet.set_column('D:D', 18)
+
+    title_format = workbook.add_format({
+        'bold': True, 'font_name': 'Arial', 'font_size': 15,
+        'font_color': '#17365D', 'bottom': 2, 'bottom_color': '#4472C4'
+    })
+    label_format = workbook.add_format({
+        'bold': True, 'font_name': 'Arial', 'font_color': '#404040',
+        'bg_color': '#EAF0F8', 'valign': 'vcenter'
+    })
+    value_format = workbook.add_format({
+        'font_name': 'Arial', 'font_color': '#222222', 'valign': 'vcenter'
+    })
+    count_format = workbook.add_format({
+        'font_name': 'Arial', 'bold': True, 'font_size': 12,
+        'font_color': '#217346', 'num_format': '0', 'valign': 'vcenter'
+    })
+    section_format = workbook.add_format({
+        'bold': True, 'font_name': 'Arial', 'font_color': '#17365D',
+        'bottom': 1, 'bottom_color': '#B4C7E7'
+    })
+
+    worksheet.merge_range('A1:D1', 'Отчёт по анализу пешеходного перехода', title_format)
+    worksheet.set_row(0, 26)
+    worksheet.write('A3', 'ID запроса', label_format)
+    worksheet.write('B3', req_id, value_format)
+    worksheet.write('A4', 'Дата и время обработки', label_format)
+    worksheet.write('B4', timestamp or '', value_format)
+    worksheet.write('A5', 'Обнаружено пешеходов', label_format)
+    worksheet.write('B5', pedestrian_count or 0, count_format)
+    worksheet.write('A7', 'Изображение с результатом распознавания', section_format)
+
+    image = cv2.imread(result_path) if result_path and os.path.isfile(result_path) else None
+    if image is not None:
+        height, width = image.shape[:2]
+        scale = min(640 / width, 360 / height, 1)
+        worksheet.insert_image('A8', result_path, {
+            'x_scale': scale,
+            'y_scale': scale,
+            'object_position': 1,
+            'description': 'Изображение с обнаруженными пешеходами'
+        })
+    else:
+        worksheet.write('A8', 'Файл изображения результата недоступен.', value_format)
+
+    workbook.close()
+    output.seek(0)
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'pedestrian_report_{req_id}.xlsx'
+    )
 
 
 if __name__ == '__main__':

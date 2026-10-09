@@ -15,6 +15,7 @@
         img { max-width: 100%; height: auto; border-radius: 5px; border: 1px solid #ddd; margin-top: 15px; }
         .stats { font-size: 18px; font-weight: bold; color: #28a745; margin: 15px 0; }
         .report-btn { background-color: #28a745; text-decoration: none; display: inline-block; padding: 10px 15px; color: white; border-radius: 5px; margin-top: 10px; }
+        .excel-report-btn { background-color: #217346; text-decoration: none; display: inline-block; padding: 10px 15px; color: white; border-radius: 5px; margin: 10px 0 0 8px; }
         .tabs { display: flex; gap: 10px; border-bottom: 1px solid #ddd; margin: 20px 0; }
         .tab-btn { background: transparent; color: #0056b3; border-radius: 5px 5px 0 0; }
         .tab-btn.active { background: #0056b3; color: white; }
@@ -48,6 +49,7 @@
             <img id="resultImage" src="" alt="Результат детекции">
             <br><br>
             <a id="downloadReportLink" class="report-btn" href="#" target="_blank">Скачать PDF-отчёт</a>
+            <a id="downloadExcelReportLink" class="excel-report-btn" href="#">Скачать Excel-отчёт</a>
         </div>
     </section>
 
@@ -78,6 +80,7 @@ async function processImage() {
             document.getElementById('resultImage').src = data.result_url + '?' + new Date().getTime();
             document.getElementById('statsText').innerText = `Обнаружено пешеходов на переходе: ${data.count}`;
             document.getElementById('downloadReportLink').href = `/generate_report/${data.id}`;
+            document.getElementById('downloadExcelReportLink').href = `/generate_excel_report/${data.id}`;
         } else {
             alert('Ошибка: ' + data.error);
         }
@@ -139,8 +142,12 @@ async function loadHistory() {
             report.className = 'report-btn';
             report.href = `/generate_report/${entry.id}`;
             report.textContent = 'Скачать PDF-отчёт';
+            const excelReport = document.createElement('a');
+            excelReport.className = 'excel-report-btn';
+            excelReport.href = `/generate_excel_report/${entry.id}`;
+            excelReport.textContent = 'Скачать Excel-отчёт';
 
-            details.append(date, count, report);
+            details.append(date, count, report, excelReport);
             card.append(image, details);
             historyList.append(card);
         }
